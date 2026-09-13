@@ -1,6 +1,6 @@
 {
   "name": "Clay’s Granite and Marble Manufacturing",
-  "description": "Clay’s Granite and Marble Manufacturing – Premium Ethiopian natural stone manufacturing specializing in granite and marble for architectural, residential, and commercial projects.",
+  "description": "Company Financial & Stock Management System for Clay’s Granite and Marble Manufacturing, managing shareholder capital, stone stock inventory, sales, operating expenses, and profit & loss analysis.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

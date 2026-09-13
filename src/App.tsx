@@ -1,230 +1,685 @@
-import { useState } from 'react';
-import Navbar from './components/Navbar';
-import Hero from './components/Hero';
-import AboutSection from './components/AboutSection';
-import OurStones from './components/OurStones';
-import StoneApplications from './components/StoneApplications';
-import MaterialToMasterpiece from './components/MaterialToMasterpiece';
-import ProductDetailModal from './components/ProductDetailModal';
-import QuotationCalculator from './components/QuotationCalculator';
-import ProjectsSection from './components/ProjectsSection';
-import WhyClays from './components/WhyClays';
-import ManufacturingProcess from './components/ManufacturingProcess';
-import StoneGallery from './components/StoneGallery';
-import ContactSection from './components/ContactSection';
-import Footer from './components/Footer';
-import AdminPreviewModal from './components/AdminPreviewModal';
-import MobileQuickBar from './components/MobileQuickBar';
-import { StoneProduct, QuotationSubmission } from './types';
+import React, { useState, useEffect, useCallback } from "react";
+import { api, getStoredToken, removeStoredToken } from "./api";
+import {
+  AuthUser,
+  Account,
+  Transaction,
+  Credit,
+  Category,
+  DashboardData,
+  EnvironmentType,
+  Shareholder,
+  StockItem,
+  StockWasteLog,
+  Sale,
+  CompanyExpense,
+  CompanyFinanceSummary,
+  CreditDirection
+} from "./types";
 
-// Initial realistic quotation inquiries to demonstrate future-ready admin architecture
-const INITIAL_QUOTATIONS: QuotationSubmission[] = [
-  {
-    id: 'QUO-892104',
-    createdAt: '06 Sep 2026, 14:20',
-    fullName: 'Henok Tadesse',
-    company: 'Abyssinia Design & Build',
-    phoneNumber: '+251 91 145 8820',
-    email: 'h.tadesse@abyssiniadesign.com',
-    projectLocation: 'Bole Medhanealem, Addis Ababa',
-    productType: 'Granite',
-    specificStone: 'AXUM GRANITE BLACK',
-    application: 'Stair, Coping',
-    totalAreaM2: 24.58,
-    totalLinearM: 68.6,
-    calculatedAreaM2: 24.58,
-    calculatedLinearM: 68.6,
-    preferredFinish: 'Flamed',
-    applications: [
-      {
-        id: 'Stair',
-        type: 'Stair',
-        label: 'Stair',
-        finish: 'Flamed',
-        calculatedAreaM2: 18.58,
-        calculatedLinearM: 48.6,
-        detailsSummary: '36 Steps (1.35m × 0.30m, 3 cm (30 mm)) + 36 Risers'
-      },
-      {
-        id: 'Coping',
-        type: 'Coping',
-        label: 'Coping',
-        finish: 'Flamed',
-        calculatedAreaM2: 6.00,
-        calculatedLinearM: 20.0,
-        detailsSummary: '20 lm Coping (Width: 0.30m, 3 cm (30 mm))'
-      }
-    ],
-    projectDescription: 'Commercial entrance stair treads with 30mm thickness and anti-slip flamed finish plus exterior boundary coping.',
-    attachmentName: 'Bole_Office_Stair_Schedule_Rev2.pdf',
-    status: 'Pending Review'
-  },
-  {
-    id: 'QUO-891942',
-    createdAt: '04 Sep 2026, 09:45',
-    fullName: 'Sara Wolde',
-    company: 'Studio Vista Architects',
-    phoneNumber: '+251 92 310 9940',
-    email: 'sara@studiovista.et',
-    projectLocation: 'Old Airport Area, Addis Ababa',
-    productType: 'Marble',
-    specificStone: 'WELEGA MARBLE WHITE',
-    application: 'Window sill',
-    totalAreaM2: 8.1,
-    totalLinearM: 32.4,
-    calculatedAreaM2: 8.1,
-    calculatedLinearM: 32.4,
-    preferredFinish: 'Polished',
-    applications: [
-      {
-        id: 'Window Sill',
-        type: 'Window Sill',
-        label: 'Window Sill',
-        finish: 'Polished',
-        calculatedAreaM2: 8.1,
-        calculatedLinearM: 32.4,
-        detailsSummary: '18 Sills (1.80m × 0.25m, 2 cm (20 mm), Drip Groove)'
-      }
-    ],
-    projectDescription: 'Residential villa interior window sills with pencil round exposed edge profiles.',
-    attachmentName: 'Villa_Window_Sill_Details.dwg',
-    status: 'Contacted'
-  }
-];
+// Component Views
+import { LoginView } from "./components/LoginView";
+import { Sidebar, ActiveView } from "./components/Sidebar";
+import { TopNav } from "./components/TopNav";
+import { DashboardView } from "./components/DashboardView";
+import { ShareholdersView } from "./components/ShareholdersView";
+import { StockManagementView } from "./components/StockManagementView";
+import { SalesManagementView } from "./components/SalesManagementView";
+import { ExpensesManagementView } from "./components/ExpensesManagementView";
+import { ProfitLossView } from "./components/ProfitLossView";
+import { AccountsView } from "./components/AccountsView";
+import { CreditManagementView } from "./components/CreditManagementView";
+import { CashFlowView } from "./components/CashFlowView";
+import { TransactionsView } from "./components/TransactionsView";
+import { AuditLogView } from "./components/AuditLogView";
+import { SettingsView } from "./components/SettingsView";
+import { SecurityWarningBanner } from "./components/SecurityWarningBanner";
+
+// Modals
+import { TransactionModal } from "./components/modals/TransactionModal";
+import { CreditModal } from "./components/modals/CreditModal";
+import { CreditPaymentModal } from "./components/modals/CreditPaymentModal";
+import { AccountModal } from "./components/modals/AccountModal";
+import { ReceiptViewerModal } from "./components/modals/ReceiptViewerModal";
+import { ChangePasswordModal } from "./components/modals/ChangePasswordModal";
+import { DailyClosingModal } from "./components/DailyClosingModal";
+import { DailyClosingPromptBanner } from "./components/DailyClosingPromptBanner";
 
 export default function App() {
-  // Modal & Interactive Navigation State
-  const [selectedProductForModal, setSelectedProductForModal] = useState<StoneProduct | null>(null);
-  const [targetStoneIdForQuote, setTargetStoneIdForQuote] = useState<string>('axum-granite-black');
-  const [targetApplicationForQuote, setTargetApplicationForQuote] = useState<string>('Stair');
-  const [isAdminOpen, setIsAdminOpen] = useState<boolean>(false);
-  const [quotations, setQuotations] = useState<QuotationSubmission[]>(INITIAL_QUOTATIONS);
+  // Auth state
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
 
-  // Smooth scroll to section
-  const scrollToSection = (sectionId: string) => {
-    const el = document.getElementById(sectionId);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth' });
+  // Application settings
+  const [companyName, setCompanyName] = useState("Clay’s Granite & Marble");
+  const [currency, setCurrency] = useState("ETB");
+
+  // Navigation & UI state
+  const [activeView, setActiveView] = useState<ActiveView>("dashboard");
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isWarningDismissed, setIsWarningDismissed] = useState(false);
+
+  // Core Company Data state
+  const [companySummary, setCompanySummary] = useState<CompanyFinanceSummary | null>(null);
+  const [shareholders, setShareholders] = useState<Shareholder[]>([]);
+  const [stockItems, setStockItems] = useState<StockItem[]>([]);
+  const [stockWasteLogs, setStockWasteLogs] = useState<StockWasteLog[]>([]);
+  const [sales, setSales] = useState<Sale[]>([]);
+  const [expenses, setExpenses] = useState<CompanyExpense[]>([]);
+
+  // Auxiliary data
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [credits, setCredits] = useState<Credit[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loadingData, setLoadingData] = useState(false);
+
+  // Modals state
+  const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
+  const [editTransaction, setEditTransaction] = useState<Transaction | null>(null);
+  const [isCreditModalOpen, setIsCreditModalOpen] = useState(false);
+  const [initialCreditDir, setInitialCreditDir] = useState<CreditDirection>("owed_to_me");
+  const [selectedCreditForPayment, setSelectedCreditForPayment] = useState<Credit | null>(null);
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [editAccount, setEditAccount] = useState<Account | null>(null);
+  const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
+  const [receiptName, setReceiptName] = useState<string | null>(null);
+  const [isChangePasswordModalOpen, setIsChangePasswordModalOpen] = useState(false);
+
+  // Daily Closing Statement state
+  const [isDailyClosingModalOpen, setIsDailyClosingModalOpen] = useState(false);
+  const [closingPrompt, setClosingPrompt] = useState<{
+    show: boolean;
+    message: string;
+    date?: string;
+  } | null>(null);
+
+  const triggerDailyClosingPrompt = (message: string, date?: string) => {
+    const enabled = localStorage.getItem("auto_prompt_daily_excel") !== "false";
+    if (enabled) {
+      setClosingPrompt({
+        show: true,
+        message,
+        date: date || new Date().toISOString().split("T")[0]
+      });
     }
   };
 
-  const handleRequestQuote = (stoneId?: string, appType?: string) => {
-    if (stoneId) setTargetStoneIdForQuote(stoneId);
-    if (appType) setTargetApplicationForQuote(appType);
-    scrollToSection('quotation');
+  // 1. Check Authentication on Mount
+  useEffect(() => {
+    const token = getStoredToken();
+    if (!token) {
+      setCheckingAuth(false);
+      return;
+    }
+
+    api
+      .getMe()
+      .then((res) => {
+        setCurrentUser(res.user);
+      })
+      .catch(() => {
+        removeStoredToken();
+        setCurrentUser(null);
+      })
+      .finally(() => {
+        setCheckingAuth(false);
+      });
+  }, []);
+
+  // 2. Fetch all company data
+  const fetchAllData = useCallback(async () => {
+    if (!currentUser) return;
+    setLoadingData(true);
+    try {
+      const [
+        summaryRes,
+        shRes,
+        stkRes,
+        wstRes,
+        slsRes,
+        expRes,
+        dashRes,
+        accsRes,
+        txsRes,
+        credsRes,
+        catsRes
+      ] = await Promise.all([
+        api.getCompanySummary().catch(() => null),
+        api.getShareholders().catch(() => ({ shareholders: [], totalCapital: 0, shareholderCount: 0 })),
+        api.getStockItems().catch(() => []),
+        api.getStockWasteLogs().catch(() => []),
+        api.getSales().catch(() => []),
+        api.getExpenses().catch(() => []),
+        api.getDashboard().catch(() => null),
+        api.getAccounts("company").catch(() => []),
+        api.getTransactions({ environment: "company" }).catch(() => []),
+        api.getCredits({ environment: "company" }).catch(() => []),
+        api.getCategories().catch(() => [])
+      ]);
+
+      if (summaryRes) setCompanySummary(summaryRes);
+      const shList = Array.isArray(shRes) ? shRes : (shRes?.shareholders || []);
+      setShareholders(shList);
+      setStockItems(Array.isArray(stkRes) ? stkRes : []);
+      setStockWasteLogs(Array.isArray(wstRes) ? wstRes : []);
+      setSales(Array.isArray(slsRes) ? slsRes : []);
+      setExpenses(Array.isArray(expRes) ? expRes : []);
+      if (dashRes) setDashboardData(dashRes);
+      setAccounts(Array.isArray(accsRes) ? accsRes : []);
+      setTransactions(Array.isArray(txsRes) ? txsRes : []);
+      setCredits(Array.isArray(credsRes) ? credsRes : []);
+      setCategories(Array.isArray(catsRes) ? catsRes : []);
+    } catch (err) {
+      console.error("Error fetching company data:", err);
+    } finally {
+      setLoadingData(false);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (currentUser) {
+      fetchAllData();
+    }
+  }, [currentUser, fetchAllData]);
+
+  // Logout handler
+  const handleLogout = async () => {
+    try {
+      await api.logout();
+    } catch (e) {
+      // ignore
+    }
+    removeStoredToken();
+    setCurrentUser(null);
   };
 
-  const handleServiceSelectForQuote = (serviceTitle: string) => {
-    let mappedApp = 'Other';
-    const lower = serviceTitle.toLowerCase();
-    if (lower.includes('stair')) mappedApp = 'Stair';
-    else if (lower.includes('sill')) mappedApp = 'Window sill';
-    else if (lower.includes('coping')) mappedApp = 'Coping';
-    else if (lower.includes('fabrication')) mappedApp = 'Countertop';
-    
-    setTargetApplicationForQuote(mappedApp);
-    scrollToSection('quotation');
+  // 3. Shareholder operations
+  const handleAddShareholder = async (data: {
+    name: string;
+    contribution_amount: number;
+    contribution_date: string;
+    phone?: string;
+    notes?: string;
+  }) => {
+    await api.createShareholder(data);
+    await fetchAllData();
+    triggerDailyClosingPrompt("Shareholder equity recorded!", data.contribution_date);
   };
 
-  const handleNewQuoteSubmitted = (newQuote: QuotationSubmission) => {
-    setQuotations(prev => [newQuote, ...prev]);
+  const handleDeleteShareholder = async (id: string) => {
+    await api.deleteShareholder(id);
+    await fetchAllData();
   };
 
-  const handleUpdateQuoteStatus = (id: string, newStatus: QuotationSubmission['status']) => {
-    setQuotations(prev => prev.map(q => q.id === id ? { ...q, status: newStatus } : q));
+  const handleUpdateShareholder = async (id: string, data: Partial<Shareholder>) => {
+    await api.updateShareholder(id, data);
+    await fetchAllData();
+  };
+
+  // 4. Stock operations
+  const handleAddStockItem = async (data: any) => {
+    await api.createStockItem(data);
+    await fetchAllData();
+    triggerDailyClosingPrompt("New stone stock intake recorded for today!");
+  };
+
+  const handleLogWaste = async (
+    stockIdOrData: any,
+    wasteData?: any
+  ) => {
+    await api.logStockWaste(stockIdOrData, wasteData);
+    await fetchAllData();
+    triggerDailyClosingPrompt("Stone waste log recorded for today!");
+  };
+
+  const handleDeleteStockItem = async (id: string) => {
+    await api.deleteStockItem(id);
+    await fetchAllData();
+  };
+
+  // 5. Sales operations
+  const handleAddSale = async (data: {
+    sale_date: string;
+    customer_name: string;
+    customer_phone?: string;
+    stock_item_id: string;
+    quantity_sold: number;
+    selling_price_per_unit: number;
+    deposit_account_id?: string;
+    payment_status?: "paid" | "partial" | "unpaid";
+    amount_paid?: number;
+    notes?: string;
+  }) => {
+    await api.createSale(data);
+    await fetchAllData();
+    triggerDailyClosingPrompt("Stone sale invoice recorded for today!", data.sale_date);
+  };
+
+  const handleDeleteSale = async (id: string) => {
+    await api.deleteSale(id);
+    await fetchAllData();
+  };
+
+  // 6. Expense operations
+  const handleAddExpense = async (data: {
+    date: string;
+    category: string;
+    amount: number;
+    description: string;
+    supplier_name: string;
+    supplier_phone?: string;
+    payment_method: string;
+    account_id?: string;
+    notes?: string;
+  }) => {
+    await api.createExpense(data);
+    await fetchAllData();
+    triggerDailyClosingPrompt("Factory operating expense recorded for today!", data.date);
+  };
+
+  const handleDeleteExpense = async (id: string) => {
+    await api.deleteExpense(id);
+    await fetchAllData();
+  };
+
+  // Navigation shortcuts
+  const handleOpenSaleModal = () => {
+    setActiveView("sales");
+  };
+
+  const handleOpenStockModal = () => {
+    setActiveView("stock");
+  };
+
+  const handleOpenExpenseModal = () => {
+    setActiveView("expenses");
+  };
+
+  const handleOpenShareholderModal = () => {
+    setActiveView("shareholders");
+  };
+
+  const handleOpenWasteModal = () => {
+    setActiveView("stock");
+  };
+
+  // If loading auth state
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-300">
+        <div className="w-9 h-9 border-2 border-emerald-500/30 border-t-emerald-400 rounded-full animate-spin mb-3" />
+        <p className="text-xs font-mono text-slate-400 tracking-wider uppercase">
+          Verifying Company Session...
+        </p>
+      </div>
+    );
+  }
+
+  // If not logged in
+  if (!currentUser) {
+    return <LoginView onLoginSuccess={(user) => setCurrentUser(user)} />;
+  }
+
+  // Fallback synthetic summary if not loaded yet
+  const activeSummary: CompanyFinanceSummary = {
+    totalShareholderCapital:
+      companySummary?.totalShareholderCapital ??
+      (shareholders || []).reduce((sum, s) => sum + s.contribution_amount, 0),
+    shareholdersCount:
+      companySummary?.shareholdersCount ?? (shareholders || []).length,
+    totalStockValuation:
+      companySummary?.totalStockValuation ??
+      (stockItems || []).reduce((sum, s) => sum + s.stock_valuation, 0),
+    totalAvailableTons:
+      companySummary?.totalAvailableTons ??
+      (stockItems || [])
+        .filter((s) => s.unit === "ton")
+        .reduce((sum, s) => sum + s.current_quantity, 0),
+    totalAvailableSqm:
+      companySummary?.totalAvailableSqm ??
+      (stockItems || [])
+        .filter((s) => s.unit === "meter")
+        .reduce((sum, s) => sum + s.current_quantity, 0),
+    totalWasteValuation:
+      companySummary?.totalWasteValuation ??
+      (stockWasteLogs || []).reduce((sum, w) => sum + w.waste_cost_valuation, 0),
+    totalRevenue:
+      companySummary?.totalRevenue ??
+      (sales || []).reduce((sum, s) => sum + s.total_revenue, 0),
+    totalCogs:
+      companySummary?.totalCogs ??
+      (sales || []).reduce((sum, s) => sum + s.cost_of_goods_sold, 0),
+    grossProfit:
+      companySummary?.grossProfit ??
+      (sales || []).reduce((sum, s) => sum + (s.total_revenue - s.cost_of_goods_sold), 0),
+    grossMarginPct: companySummary?.grossMarginPct ?? 0,
+    totalOperatingExpenses:
+      companySummary?.totalOperatingExpenses ??
+      (expenses || []).reduce((sum, e) => sum + e.amount, 0),
+    netProfitLoss: companySummary?.netProfitLoss ?? 0,
+    netMarginPct: companySummary?.netMarginPct ?? 0,
+    isProfit: companySummary?.isProfit ?? false,
+    totalSoldTons:
+      companySummary?.totalSoldTons ??
+      (sales || [])
+        .filter((s) => s.unit === "ton")
+        .reduce((sum, s) => sum + s.quantity_sold, 0),
+    totalSoldSqm:
+      companySummary?.totalSoldSqm ??
+      (sales || [])
+        .filter((s) => s.unit === "meter")
+        .reduce((sum, s) => sum + s.quantity_sold, 0),
+    totalLiquidCashBank:
+      companySummary?.totalLiquidCashBank ??
+      (accounts || []).reduce((sum, a) => sum + a.current_balance, 0),
+    recentSales: companySummary?.recentSales || (sales || []).slice(0, 10),
+    recentExpenses: companySummary?.recentExpenses || (expenses || []).slice(0, 10),
+    recentStock: companySummary?.recentStock || stockItems || [],
+    stoneBreakdown: companySummary?.stoneBreakdown || [],
+    expensesByCategory: companySummary?.expensesByCategory || [],
+    shareholders: companySummary?.shareholders || shareholders || [],
+    accounts: companySummary?.accounts || accounts || []
+  };
+
+  // Render view router based on activeView
+  const renderCurrentView = () => {
+    switch (activeView) {
+      case "dashboard":
+        return (
+          <DashboardView
+            summary={activeSummary}
+            currency={currency}
+            onNavigate={(view) => setActiveView(view as ActiveView)}
+            onOpenSaleModal={handleOpenSaleModal}
+            onOpenStockModal={handleOpenStockModal}
+            onOpenExpenseModal={handleOpenExpenseModal}
+            onOpenShareholderModal={handleOpenShareholderModal}
+            onOpenWasteModal={handleOpenWasteModal}
+            onOpenDailyClosingModal={() => setIsDailyClosingModalOpen(true)}
+          />
+        );
+
+      case "shareholders":
+        return (
+          <ShareholdersView
+            shareholders={shareholders}
+            totalCapital={activeSummary.totalShareholderCapital}
+            accounts={accounts}
+            currency={currency}
+            onAddShareholder={handleAddShareholder}
+            onUpdateShareholder={handleUpdateShareholder}
+            onDeleteShareholder={handleDeleteShareholder}
+          />
+        );
+
+      case "stock":
+        return (
+          <StockManagementView
+            stockItems={stockItems}
+            wasteLogs={stockWasteLogs}
+            accounts={accounts}
+            currency={currency}
+            onAddStockItem={handleAddStockItem}
+            onLogWaste={handleLogWaste}
+            onDeleteStockItem={handleDeleteStockItem}
+          />
+        );
+
+      case "sales":
+        return (
+          <SalesManagementView
+            sales={sales}
+            stockItems={stockItems}
+            accounts={accounts}
+            currency={currency}
+            onAddSale={handleAddSale}
+            onDeleteSale={handleDeleteSale}
+          />
+        );
+
+      case "expenses":
+        return (
+          <ExpensesManagementView
+            expenses={expenses}
+            accounts={accounts}
+            currency={currency}
+            onAddExpense={handleAddExpense}
+            onDeleteExpense={handleDeleteExpense}
+          />
+        );
+
+      case "profit_loss":
+        return <ProfitLossView summary={activeSummary} currency={currency} />;
+
+      case "accounts":
+        return (
+          <AccountsView
+            accounts={accounts}
+            currency={currency}
+            initialEnvironment="company"
+            onOpenNewAccount={() => {
+              setEditAccount(null);
+              setIsAccountModalOpen(true);
+            }}
+            onEditAccount={(acc) => {
+              setEditAccount(acc);
+              setIsAccountModalOpen(true);
+            }}
+            onOpenTransactionForAccount={() => {
+              setActiveView("all_transactions");
+            }}
+            onViewAccountLedger={() => {
+              setActiveView("all_transactions");
+            }}
+            onRefresh={fetchAllData}
+          />
+        );
+
+      case "credits":
+        return (
+          <CreditManagementView
+            credits={credits}
+            accounts={accounts}
+            currency={currency}
+            initialEnvironment="company"
+            onOpenCreditModal={(env, dir) => {
+              setInitialCreditDir(dir || "owed_to_me");
+              setIsCreditModalOpen(true);
+            }}
+            onOpenPaymentModal={(credit) => setSelectedCreditForPayment(credit)}
+            onRefresh={fetchAllData}
+          />
+        );
+
+      case "cash_flow":
+        return <CashFlowView currency={currency} initialEnvironment="company" />;
+
+      case "all_transactions":
+        return (
+          <TransactionsView
+            transactions={transactions}
+            accounts={accounts}
+            categories={categories}
+            currency={currency}
+            initialEnvironment="company"
+            onOpenNewTransaction={() => {
+              setEditTransaction(null);
+              setIsTransactionModalOpen(true);
+            }}
+            onEditTransaction={(tx) => {
+              setEditTransaction(tx);
+              setIsTransactionModalOpen(true);
+            }}
+            onViewReceipt={(url, name) => {
+              setReceiptUrl(url);
+              setReceiptName(name);
+            }}
+            onRefresh={fetchAllData}
+          />
+        );
+
+      case "audit_log":
+        return <AuditLogView />;
+
+      case "settings":
+        return (
+          <SettingsView
+            companyName={companyName}
+            setCompanyName={setCompanyName}
+            currency={currency}
+            setCurrency={setCurrency}
+            onRefreshData={fetchAllData}
+            onNavigateToAccounts={() => setActiveView("accounts")}
+            onNavigateToCategories={() => setActiveView("dashboard")}
+          />
+        );
+
+      default:
+        return null;
+    }
   };
 
   return (
-    <div className="min-h-screen bg-[#F4F3F0] text-[#252625] flex flex-col font-sans selection:bg-[#252625] selection:text-[#F4F3F0]">
-      
-      {/* Fixed Luxury Navigation */}
-      <Navbar
-        onOpenQuote={() => handleRequestQuote()}
-        onOpenAdmin={() => setIsAdminOpen(true)}
-        quoteCount={quotations.length}
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex font-sans antialiased">
+      {/* Fixed Sidebar */}
+      <Sidebar
+        activeView={activeView}
+        setActiveView={setActiveView}
+        currentUser={currentUser}
+        onLogout={handleLogout}
+        isOpenMobile={isMobileMenuOpen}
+        setIsOpenMobile={setIsMobileMenuOpen}
+        companyName={companyName}
+        onOpenDailyClosing={() => setIsDailyClosingModalOpen(true)}
       />
 
-      {/* Main Page Sections */}
-      <main className="flex-1">
-        
-        {/* 1. Dramatic Hero Section */}
-        <Hero
-          onExploreStones={() => scrollToSection('our-stones')}
-          onRequestQuote={() => handleRequestQuote()}
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-w-0 lg:pl-64">
+        {/* Sticky Top Navigation */}
+        <TopNav
+          onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
+          onOpenSaleModal={handleOpenSaleModal}
+          onOpenStockModal={handleOpenStockModal}
+          onOpenExpenseModal={handleOpenExpenseModal}
+          onOpenDailyClosing={() => setIsDailyClosingModalOpen(true)}
+          onOpenSettings={() => setActiveView("settings")}
+          onLogout={handleLogout}
+          currentUser={currentUser}
+          alerts={dashboardData?.alerts || []}
+          searchQuery={searchQuery}
+          setSearchQuery={(q) => {
+            setSearchQuery(q);
+            if (activeView !== "stock" && activeView !== "sales" && activeView !== "expenses") {
+              // Can navigate or keep in current view
+            }
+          }}
+          currency={currency}
+          companyName={companyName}
+          netProfitLoss={activeSummary.netProfitLoss}
         />
 
-        {/* 2. About Clay's (Split Layout) */}
-        <AboutSection
-          onDiscoverMore={() => scrollToSection('why-clays')}
-        />
+        {/* Security Warning Banner if default password is still used */}
+        {currentUser?.is_default_password && !isWarningDismissed && (
+          <SecurityWarningBanner
+            onOpenChangePassword={() => setIsChangePasswordModalOpen(true)}
+            onDismiss={() => setIsWarningDismissed(true)}
+          />
+        )}
 
-        {/* 3. Our Stones / Product Catalog (5 Key Ethiopian Stones with Official Prices) */}
-        <OurStones
-          onSelectProduct={(product) => setSelectedProductForModal(product)}
-          onRequestQuote={(stoneId) => handleRequestQuote(stoneId)}
-        />
+        {/* Dynamic View Body */}
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
+          {renderCurrentView()}
+        </main>
+      </div>
 
-        {/* 4. Stone Applications / Fabrication Capabilities (7 Key Architectural Pieces) */}
-        <StoneApplications
-          onSelectApplicationForQuote={(appName) => handleServiceSelectForQuote(appName)}
-        />
-
-        {/* 5. Material to Masterpiece — Story of Ethiopian Stone & Heritage */}
-        <MaterialToMasterpiece />
-
-        {/* 6. Stair & Sill Interactive Quotation System with Real-Time ETB Calculation */}
-        <QuotationCalculator
-          initialStoneId={targetStoneIdForQuote}
-          initialApplication={targetApplicationForQuote}
-          onQuoteSubmitted={handleNewQuoteSubmitted}
-        />
-
-        {/* 7. Architectural Projects Showcase (Editorial Magazine Gallery) */}
-        <ProjectsSection
-          onSelectProjectForQuote={(stoneName, app) => handleRequestQuote(undefined, app)}
-        />
-
-        {/* 8. Why Clay's — Real Manufacturing Advantages */}
-        <WhyClays />
-
-        {/* 9. From Quarry to Architecture (7-Stage Process) */}
-        <ManufacturingProcess />
-
-        {/* 10. Visual Stone Gallery & Lightbox */}
-        <StoneGallery />
-
-        {/* 11. Contact & Final CTA */}
-        <ContactSection
-          onRequestQuote={() => handleRequestQuote()}
-        />
-      </main>
-
-      {/* Luxury Dark Navy Footer */}
-      <Footer
-        onOpenAdmin={() => setIsAdminOpen(true)}
-        onOpenQuote={() => handleRequestQuote()}
+      {/* Global Modals for bank accounts & customer credits */}
+      <TransactionModal
+        isOpen={isTransactionModalOpen}
+        onClose={() => setIsTransactionModalOpen(false)}
+        onSuccess={() => {
+          fetchAllData();
+          triggerDailyClosingPrompt("Transaction recorded for today!");
+        }}
+        editTransaction={editTransaction}
+        accounts={accounts}
+        categories={categories}
+        currency={currency}
+        initialEnvironment="company"
+        initialType="expense"
       />
 
-      {/* Dedicated Sticky Mobile Quick-Contact Bar */}
-      <MobileQuickBar
-        onRequestQuote={() => handleRequestQuote()}
+      <CreditModal
+        isOpen={isCreditModalOpen}
+        onClose={() => setIsCreditModalOpen(false)}
+        onSuccess={() => {
+          fetchAllData();
+          triggerDailyClosingPrompt("Credit agreement recorded for today!");
+        }}
+        accounts={accounts}
+        currency={currency}
+        initialEnvironment="company"
+        initialDirection={initialCreditDir}
       />
 
-      {/* Product Detail Modal */}
-      <ProductDetailModal
-        product={selectedProductForModal}
-        onClose={() => setSelectedProductForModal(null)}
-        onRequestQuote={(stoneId) => handleRequestQuote(stoneId)}
+      <CreditPaymentModal
+        isOpen={!!selectedCreditForPayment}
+        onClose={() => setSelectedCreditForPayment(null)}
+        onSuccess={() => {
+          fetchAllData();
+          triggerDailyClosingPrompt("Credit settlement payment recorded for today!");
+        }}
+        credit={selectedCreditForPayment}
+        accounts={accounts}
+        currency={currency}
       />
 
-      {/* Admin Architecture Preview Modal */}
-      <AdminPreviewModal
-        isOpen={isAdminOpen}
-        onClose={() => setIsAdminOpen(false)}
-        quotations={quotations}
-        onUpdateQuoteStatus={handleUpdateQuoteStatus}
+      <AccountModal
+        isOpen={isAccountModalOpen}
+        onClose={() => setIsAccountModalOpen(false)}
+        onSuccess={fetchAllData}
+        editAccount={editAccount}
+        currency={currency}
+        defaultEnvironment="company"
       />
 
+      <ReceiptViewerModal
+        isOpen={!!receiptUrl}
+        onClose={() => {
+          setReceiptUrl(null);
+          setReceiptName(null);
+        }}
+        receiptUrl={receiptUrl}
+        receiptName={receiptName}
+      />
+
+      <ChangePasswordModal
+        isOpen={isChangePasswordModalOpen}
+        onClose={() => setIsChangePasswordModalOpen(false)}
+        onSuccess={() => {
+          setIsChangePasswordModalOpen(false);
+          setIsWarningDismissed(true);
+        }}
+      />
+
+      {/* Daily Closing & End-of-Day 24-Hour Excel Statement Modal */}
+      <DailyClosingModal
+        isOpen={isDailyClosingModalOpen}
+        onClose={() => setIsDailyClosingModalOpen(false)}
+        currency={currency}
+      />
+
+      {/* Global Real-Time Prompt Banner triggered after recording data */}
+      {closingPrompt?.show && (
+        <DailyClosingPromptBanner
+          message={closingPrompt.message}
+          date={closingPrompt.date}
+          onOpenModal={() => setIsDailyClosingModalOpen(true)}
+          onDismiss={() => setClosingPrompt(null)}
+        />
+      )}
     </div>
   );
 }
